@@ -86,6 +86,16 @@ def generate_video(prompt: str, duration: int, output_path: Path) -> Path:
     return output_path
 
 
+def read_prompt_file(path: Path) -> str:
+    """Read a prompt file, tolerating Notepad's default ANSI/Windows-1251 encoding."""
+    for encoding in ("utf-8-sig", "cp1251", "cp1252"):
+        try:
+            return path.read_text(encoding=encoding).strip()
+        except UnicodeDecodeError:
+            continue
+    raise RuntimeError(f"Could not decode {path} as UTF-8 or Windows-1251/1252")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate a short video from a text prompt.")
     prompt_source = parser.add_mutually_exclusive_group(required=True)
@@ -95,7 +105,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=Path("out/video.mp4"), help="Output file path")
     args = parser.parse_args()
 
-    prompt = args.prompt_file.read_text(encoding="utf-8").strip() if args.prompt_file else args.prompt
+    prompt = read_prompt_file(args.prompt_file) if args.prompt_file else args.prompt
 
     try:
         path = generate_video(prompt, args.duration, args.output)
