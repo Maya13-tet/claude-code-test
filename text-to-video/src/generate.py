@@ -88,13 +88,17 @@ def generate_video(prompt: str, duration: int, output_path: Path) -> Path:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate a short video from a text prompt.")
-    parser.add_argument("prompt", help="Text description of the video to generate")
+    prompt_source = parser.add_mutually_exclusive_group(required=True)
+    prompt_source.add_argument("prompt", nargs="?", help="Text description of the video to generate")
+    prompt_source.add_argument("--prompt-file", type=Path, help="Read the prompt from a text file instead")
     parser.add_argument("--duration", type=int, default=15, help="Video duration in seconds (default: 15)")
     parser.add_argument("--output", type=Path, default=Path("out/video.mp4"), help="Output file path")
     args = parser.parse_args()
 
+    prompt = args.prompt_file.read_text(encoding="utf-8").strip() if args.prompt_file else args.prompt
+
     try:
-        path = generate_video(args.prompt, args.duration, args.output)
+        path = generate_video(prompt, args.duration, args.output)
     except Exception as exc:  # noqa: BLE001
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
