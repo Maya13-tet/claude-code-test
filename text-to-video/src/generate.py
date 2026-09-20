@@ -11,47 +11,50 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-API_BASE_URL = os.environ.get("VIDEO_API_BASE_URL", "")
+API_BASE_URL = os.environ.get("VIDEO_API_BASE_URL", "https://api.kie.ai")
 API_KEY = os.environ.get("VIDEO_API_KEY", "")
+MODEL = "bytedance/seedance-2-fast"
 
 POLL_INTERVAL_SECONDS = 5
 POLL_TIMEOUT_SECONDS = 600
 
 
 def submit_generation(prompt: str, duration: int) -> str:
-    """Submit a generation job to the provider and return a job id.
-
-    Replace this with the provider's actual "create generation" endpoint.
-    """
+    """Submit a text-to-video job to KIE (Bytedance Seedance 2.0 Fast) and return the task id."""
     response = requests.post(
-        f"{API_BASE_URL}/v1/generations",
-        headers={"Authorization": f"Bearer {API_KEY}"},
-        json={"prompt": prompt, "duration_seconds": duration},
+        f"{API_BASE_URL}/api/v1/jobs/createTask",
+        headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"},
+        json={"model": MODEL, "input": {"prompt": prompt, "duration": duration}},
         timeout=30,
     )
     response.raise_for_status()
-    return response.json()["id"]
+    body = response.json()
+    if body.get("code") != 200:
+        raise RuntimeError(f"Task creation failed: {body.get('msg', 'unknown error')}")
+    return body["data"]["taskId"]
 
 
-def poll_status(job_id: str) -> str:
-    """Poll until the job finishes and return the resulting video URL.
+def poll_status(task_id: str) -> str:
+    """Poll KIE's "Get Task Details" endpoint until the job finishes and return the video URL.
 
-    Replace this with the provider's actual "get generation status" endpoint.
+    TODO: KIE's exact query endpoint/response schema wasn't available at write time —
+    confirm the path and the status/result field names against their "Get Task Details" docs.
     """
     deadline = time.monotonic() + POLL_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
         response = requests.get(
-            f"{API_BASE_URL}/v1/generations/{job_id}",
+            f"{API_BASE_URL}/api/v1/jobs/recordInfo",
             headers={"Authorization": f"Bearer {API_KEY}"},
+            params={"taskId": task_id},
             timeout=30,
         )
         response.raise_for_status()
-        data = response.json()
-        status = data.get("status")
-        if status == "completed":
-            return data["video_url"]
-        if status == "failed":
-            raise RuntimeError(f"Generation failed: {data.get('error', 'unknown error')}")
+        data = response.json().get("data", {})
+        status = data.get("state")
+        if status == "success":
+            return data["resultJson"]["video_url"]
+        if status == "fail":
+            raise RuntimeError(f"Generation failed: {data.get('failMsg', 'unknown error')}")
         time.sleep(POLL_INTERVAL_SECONDS)
     raise TimeoutError(f"Generation did not complete within {POLL_TIMEOUT_SECONDS}s")
 

@@ -1,8 +1,6 @@
 # text-to-video
 
-Заготовка проекта для генерации коротких видео (по умолчанию ~15 секунд) из текстового описания через внешний API генерации видео (например, Runway, Replicate, Luma, Pika, Sora API и т.п.).
-
-Сам вызов сгенерирован не будет — здесь только структура проекта и клиент, который нужно подключить к конкретному провайдеру.
+Проект для генерации коротких видео (по умолчанию ~15 секунд) из текстового описания через [KIE API](https://kie.ai) — модель `bytedance/seedance-2-fast`.
 
 ## Структура
 
@@ -27,9 +25,11 @@ cp .env.example .env
 Заполните `.env`:
 
 ```
-VIDEO_API_BASE_URL=https://api.example.com
-VIDEO_API_KEY=your_api_key_here
+VIDEO_API_BASE_URL=https://api.kie.ai
+VIDEO_API_KEY=your_kie_api_key_here
 ```
+
+Ключ создаётся на https://kie.ai/api-key.
 
 ## Использование
 
@@ -37,6 +37,8 @@ VIDEO_API_KEY=your_api_key_here
 python src/generate.py "Кот играет с клубком ниток на закате" --duration 15 --output out/video.mp4
 ```
 
-## Подключение реального провайдера
+## Статус интеграции с KIE
 
-В `src/generate.py` функции `submit_generation`, `poll_status` и `download_result` содержат заглушки — их нужно заменить на конкретные эндпоинты выбранного сервиса (см. документацию провайдера). Общая логика (CLI, ожидание, сохранение файла) уже готова.
+- `submit_generation` — реализована по документации `POST /api/v1/jobs/createTask` (модель `bytedance/seedance-2-fast`)
+- `poll_status` — черновая реализация под `GET /api/v1/jobs/recordInfo`; точная схема ответа ("Get Task Details") не была подтверждена документацией на момент написания — сверьте названия полей статуса/результата перед использованием
+- `duration` — по API допустимо 4–15 секунд (или -1)
