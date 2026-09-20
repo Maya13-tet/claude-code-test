@@ -37,8 +37,10 @@ VIDEO_API_KEY=your_kie_api_key_here
 python src/generate.py "Кот играет с клубком ниток на закате" --duration 15 --output out/video.mp4
 ```
 
-## Статус интеграции с KIE
+## Как это работает
 
-- `submit_generation` — реализована по документации `POST /api/v1/jobs/createTask` (модель `bytedance/seedance-2-fast`)
-- `poll_status` — черновая реализация под `GET /api/v1/jobs/recordInfo`; точная схема ответа ("Get Task Details") не была подтверждена документацией на момент написания — сверьте названия полей статуса/результата перед использованием
-- `duration` — по API допустимо 4–15 секунд (или -1)
+1. `submit_generation` — создаёт задачу через `POST /api/v1/jobs/createTask`
+2. `poll_status` — опрашивает `GET /api/v1/jobs/recordInfo` (унифицированный эндпоинт для всех моделей Market) с экспоненциальной задержкой (3 → 30 сек), пока `state` не станет `success` или `fail`; таймаут — 15 минут
+3. `download_result` — скачивает видео по ссылке из `resultUrls`
+
+Учтите: ссылки на результат действительны ~24 часа, поэтому скачивание происходит сразу после успешного статуса. Допустимая длительность видео по API — 4–15 секунд (или -1).

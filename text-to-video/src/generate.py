@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """CLI: generate a short video from a text prompt via an external text-to-video API."""
 import argparse
+import json
 import os
 import sys
 import time
@@ -15,8 +16,10 @@ API_BASE_URL = os.environ.get("VIDEO_API_BASE_URL", "https://api.kie.ai")
 API_KEY = os.environ.get("VIDEO_API_KEY", "")
 MODEL = "bytedance/seedance-2-fast"
 
-POLL_INTERVAL_SECONDS = 5
-POLL_TIMEOUT_SECONDS = 600
+POLL_INITIAL_INTERVAL_SECONDS = 3
+POLL_MAX_INTERVAL_SECONDS = 30
+POLL_TIMEOUT_SECONDS = 900
+PENDING_STATES = {"waiting", "queuing", "generating"}
 
 
 def submit_generation(prompt: str, duration: int) -> str:
@@ -35,12 +38,9 @@ def submit_generation(prompt: str, duration: int) -> str:
 
 
 def poll_status(task_id: str) -> str:
-    """Poll KIE's "Get Task Details" endpoint until the job finishes and return the video URL.
-
-    TODO: KIE's exact query endpoint/response schema wasn't available at write time —
-    confirm the path and the status/result field names against their "Get Task Details" docs.
-    """
+    """Poll KIE's "Get Task Details" endpoint until the job finishes and return the video URL."""
     deadline = time.monotonic() + POLL_TIMEOUT_SECONDS
+    interval = POLL_INITIAL_INTERVAL_SECONDS
     while time.monotonic() < deadline:
         response = requests.get(
             f"{API_BASE_URL}/api/v1/jobs/recordInfo",
@@ -49,13 +49,20 @@ def poll_status(task_id: str) -> str:
             timeout=30,
         )
         response.raise_for_status()
-        data = response.json().get("data", {})
-        status = data.get("state")
-        if status == "success":
-            return data["resultJson"]["video_url"]
-        if status == "fail":
-            raise RuntimeError(f"Generation failed: {data.get('failMsg', 'unknown error')}")
-        time.sleep(POLL_INTERVAL_SECONDS)
+        body = response.json()
+        if body.get("code") != 200:
+            raise RuntimeError(f"Status query failed: {body.get('msg', 'unknown error')}")
+        data = body["data"]
+        state = data.get("state")
+        if state == "success":
+            result = json.loads(data["resultJson"])
+            return result["resultUrls"][0]
+        if state == "fail":
+            raise RuntimeError(f"Generation failed ({data.get('failCode')}): {data.get('failMsg', 'unknown error')}")
+        if state not in PENDING_STATES:
+            raise RuntimeError(f"Unexpected task state: {state}")
+        time.sleep(interval)
+        interval = min(interval * 2, POLL_MAX_INTERVAL_SECONDS)
     raise TimeoutError(f"Generation did not complete within {POLL_TIMEOUT_SECONDS}s")
 
 
